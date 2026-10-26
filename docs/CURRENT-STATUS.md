@@ -14,8 +14,9 @@
   (202/200).
 - Concurrent duplicate requests produce exactly one run.
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
-- Graphify produced a local code graph for the repository.
-
+- `AGENTS.md` at the repository root so OpenCode auto-loads harness global
+  rules and project-specific constraints (AGENTS.md adapter; source is
+  `config/global-rules.md`).
 ## In progress
 
 - M1 status machine and illegal-transition protection (four strict `xfail`

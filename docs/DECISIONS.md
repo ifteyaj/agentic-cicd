@@ -36,7 +36,22 @@ so the guarantee holds while a run is retained. The dual-key contract and tests
 remain valid when the store is replaced.\
 **Links:** `docs/designs/m1-webhook-intake.md`, ADR 0001.
 
-## Existing architecture decisions
+## 2026-10-26 — OpenCode as a second supported coding entry point
 
+**Status:** Accepted for the harness\
+**Context:** The harness must be usable from both Claude Code and OpenCode, while
+keeping one source of instructions and running skills.\
+**Decision:** Keep `config/global-rules.md` as the single source of truth. Symlink
+it to `~/.claude/CLAUDE.md` (Claude Code) and `~/.config/opencode/AGENTS.md`
+(OpenCode). Use `AGENTS.md` in each project as the OpenCode adapter, mirroring
+`CLAUDE.md`. Tool-specific integrations (EGM plugins, Matt Pocock skills,
+Taste, agent hooks) are configured per tool; workflow logic stays portable.\
+**Alternatives:** Maintaining separate rule files per tool (drift over time);
+forcing everything into one tool only.\
+**Consequences:** A skill file might still require different execution mechanisms
+in each tool; availability must be recorded as verified, not assumed. OpenCode
+auto-loads the global and project instructions now (verified this session); the
+claude-code `--workers`/one-process API stays unchanged.\
+**Links:** `workflows/tool-adapters.md`, `templates/project-opencode-agents.md`.
 - [ADR 0001: SQLite instead of PostgreSQL and Redis](adr/0001-sqlite-over-postgres.md)
 - [ADR 0002: Approval gate after sandbox validation](adr/0002-gate-after-validation.md)
