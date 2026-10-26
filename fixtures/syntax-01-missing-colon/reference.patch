@@ -1,0 +1,6 @@
+--- a/src/geometry/area.py
++++ b/src/geometry/area.py
+@@ -1,2 +1,2 @@
+-def area_of_square(side)
++def area_of_square(side):
+     return side * side

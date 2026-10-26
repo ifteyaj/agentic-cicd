@@ -1,0 +1,6 @@
+--- a/src/stats/summary.py
++++ b/src/stats/summary.py
+@@ -1,2 +1,2 @@
+-from stats.utils import clamp  # BUG: module is stats.mathutils
++from stats.mathutils import clamp
+ # Totals are clamped to a 0-100 range.

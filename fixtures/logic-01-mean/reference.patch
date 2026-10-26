@@ -1,0 +1,9 @@
+--- a/src/stats/mean.py
++++ b/src/stats/mean.py
+@@ -1,5 +1,5 @@
+ def mean(xs):
+     total = 0
+-    for i in range(len(xs) - 1):  # BUG: skips the last element
++    for i in range(len(xs)):
+         total += xs[i]
+     return total / len(xs)

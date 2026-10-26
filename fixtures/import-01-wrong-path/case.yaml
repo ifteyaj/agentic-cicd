@@ -1,0 +1,14 @@
+case_id: import-01-wrong-path
+source: synthetic
+split: dev
+category: dependency_api
+difficulty: 1
+gt_file: src/stats/summary.py
+gt_function: summarise
+test_command: pytest -x -q
+protected_paths:
+  - tests/
+expected_failing_tests:
+  - tests/test_summary.py::test_summarise_adds_values
+  - tests/test_summary.py::test_summarise_clamps_to_high
+notes: "Import points at stats.utils, but the module is stats.mathutils."

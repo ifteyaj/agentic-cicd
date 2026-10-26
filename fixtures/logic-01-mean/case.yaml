@@ -1,0 +1,14 @@
+case_id: logic-01-mean
+source: synthetic
+split: dev
+category: logic
+difficulty: 1
+gt_file: src/stats/mean.py
+gt_function: mean
+test_command: pytest -x -q
+protected_paths:
+  - tests/
+expected_failing_tests:
+  - tests/test_stats.py::test_mean_simple
+  - tests/test_stats.py::test_mean_last
+notes: "Off-by-one: the loop never adds the final element."

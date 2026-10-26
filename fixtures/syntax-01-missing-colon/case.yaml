@@ -1,0 +1,14 @@
+case_id: syntax-01-missing-colon
+source: synthetic
+split: dev
+category: syntax_import
+difficulty: 1
+gt_file: src/geometry/area.py
+gt_function: area_of_square
+test_command: pytest -x -q
+protected_paths:
+  - tests/
+expected_failing_tests:
+  - tests/test_area.py::test_area_of_square
+  - tests/test_area.py::test_area_of_unit_square
+notes: "The def line is missing its colon, so the module fails to import and both tests error."
