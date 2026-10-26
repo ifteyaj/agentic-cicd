@@ -10,3 +10,4 @@ __pycache__/
 .ruff_cache/
 data/
 .DS_Store
+.kombai/
