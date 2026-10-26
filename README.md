@@ -8,9 +8,46 @@ The installable Python package and CLI inside this repository are called **`cicd
 
 ## Status
 
-Milestone 0 — skeleton only. The only endpoint implemented is `/healthz`. The behaviour for
-M1 is recorded as strict `xfail` tests, which turn red the moment a feature lands so the
-marker has to be removed.
+Milestone 1 — webhook intake is implemented. The service exposes:
+
+- `GET /healthz` — liveness.
+- `POST /webhooks/github` — verifies the `X-Hub-Signature-256` HMAC over the
+  raw body, accepts only failed (`failure`/`timed_out`) completed
+  `workflow_run` events, and creates exactly one queued run per delivery ID and
+  per signed `workflow_run.id:run_attempt`.
+
+The status enum, status transitions, sandbox, triage, patch generation, and the
+approval gate are still planned; the four status-machine tests remain strict
+`xfail`.
+
+## Webhook intake
+
+Configure a secret and start the API:
+
+```bash
+cd api
+export GITHUB_WEBHOOK_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+uv run uvicorn app.main:app --reload
+```
+
+The secret must not be blank or `change-me`; otherwise every delivery returns
+`503`. Point a GitHub webhook at
+`http://127.0.0.1:8000/webhooks/github` with content type `application/json`
+and the `workflow_run` event.
+
+| Response | Meaning |
+| --- | --- |
+| `202` | New run created (`{"run_id", "duplicate": false}`) |
+| `200` | Duplicate delivery or workflow attempt (`duplicate: true`) |
+| `204` | Event or conclusion ignored |
+| `400` | Malformed JSON |
+| `401` | Missing or invalid signature |
+| `413` | Body over 1 MiB |
+| `422` | Missing/invalid header or field |
+| `503` | Webhook secret not configured or unusable |
+
+M1 is single-process: deduplication is in memory and resets on restart. Do not
+run multiple workers.
 
 ## Layout
 
