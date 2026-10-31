@@ -3,6 +3,8 @@
 Importing this module never raises: settings are instantiated on demand.
 """
 
+from typing import Literal
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,6 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     github_webhook_secret: SecretStr | None = None
+    env: Literal["dev", "production"] = "production"
 
 
 def is_usable_webhook_secret(secret: str | None) -> bool:

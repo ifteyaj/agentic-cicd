@@ -23,3 +23,4 @@ class Run:
     repo_url: str
     commit_sha: str
     status: RunStatus = RunStatus.QUEUED
+    source: str = "webhook"

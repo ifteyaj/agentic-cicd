@@ -1,7 +1,6 @@
 import pytest
 
 
-@pytest.mark.xfail(strict=True, reason="M1b: mock route not implemented")
 def test_mock_route_accepts_requests_when_env_is_dev(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENV", "dev")
 

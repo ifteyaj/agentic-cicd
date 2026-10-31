@@ -181,6 +181,7 @@ class RunService:
         commit_sha: str,
         workflow_run_id: int,
         run_attempt: int,
+        source: str = "webhook",
     ) -> CreateResult:
         validate_delivery_id(delivery_id)
         normalized_url = normalize_repo_url(repo_url)
@@ -195,6 +196,7 @@ class RunService:
             repo_url=normalized_url,
             commit_sha=validated_sha,
             status=RunStatus.QUEUED,
+            source=source,
         )
         stored, created = self._store.create_if_absent(run)
         return CreateResult(run=stored, created=created)

@@ -9,6 +9,7 @@ are ever parsed.
 import hashlib
 import json
 import logging
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
@@ -31,6 +32,8 @@ router = APIRouter()
 
 MAX_BODY_BYTES = 1024 * 1024
 _ACCEPTED_CONCLUSIONS = frozenset({"failure", "timed_out"})
+
+mock_router = APIRouter()
 
 
 def _error(status_code: int, detail: str) -> JSONResponse:
@@ -172,5 +175,47 @@ async def github_webhook(request: Request) -> Response:
         result.run.repo_url,
         result.run_id,
         _content_hash(raw),
+    )
+    return JSONResponse(status_code=202, content={"run_id": result.run_id, "duplicate": False})
+
+
+@mock_router.post("/webhooks/mock", status_code=202)
+async def mock_webhook(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return _error(400, "malformed JSON")
+    if not isinstance(payload, dict):
+        return _error(422, "payload must be a JSON object")
+
+    repo_url_raw = payload.get("repo_url")
+    commit_sha_raw = payload.get("commit_sha")
+    try:
+        repo_url = normalize_repo_url(repo_url_raw)
+        commit_sha = validate_commit_sha(commit_sha_raw)
+    except InvalidRunInput as exc:
+        return _error(422, str(exc))
+
+    service: RunService = request.app.state.run_service
+    mock_id = uuid4()
+    try:
+        result = service.create_from_delivery(
+            str(mock_id),
+            repo_url=repo_url,
+            commit_sha=commit_sha,
+            workflow_run_id=mock_id.int,
+            run_attempt=1,
+            source="mock",
+        )
+    except InvalidRunInput as exc:
+        return _error(422, str(exc))
+
+    if not result.created:
+        return _duplicate(result.run_id)
+
+    logger.info(
+        "created mock run repo_url=%s run_id=%s",
+        result.run.repo_url,
+        result.run_id,
     )
     return JSONResponse(status_code=202, content={"run_id": result.run_id, "duplicate": False})
