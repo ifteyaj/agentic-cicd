@@ -11,3 +11,4 @@ __pycache__/
 data/
 .DS_Store
 .kombai/
+graphify-out/
