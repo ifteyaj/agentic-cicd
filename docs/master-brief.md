@@ -1,6 +1,6 @@
 # Master Brief: Agentic CI/CD Orchestration Platform
 
-*Master prompt and specification for the AI engineer, plus the evidence plan for the thesis. Version 1.2. Supersedes the earlier spec and quick-start documents wherever they conflict.*
+*Master prompt and specification for the AI engineer, plus the evidence plan for the thesis. Version 1.3. Supersedes the earlier spec and quick-start documents wherever they conflict.*
 
 ## 0. How to Use This Document
 
@@ -532,7 +532,7 @@ Work strictly in order. A milestone is done only when every exit criterion is de
 | **M6 Real GitHub** | Integration | HMAC webhook on the VPS or via a tunnel; branch and PR created on a test repository; hash-mismatch negative test passes; allowlist enforced |
 | **M7 Final evaluation and writing** | Results and thesis | Held-out run executed once from a tagged commit; all tables and figures regenerated; thesis complete; demo rehearsed and recorded as a fallback |
 
-### 14.1 M1 exit tests, split into M1a and M1b (write these first). M1a (webhook intake, tests 1 to 3) is done and merged. Test 1 was re-scoped from the mock route to the signed GitHub route (ADR 0003). The dev-only mock route moved to M1b as test 12. M1b covers tests 4 to 11 and welcome tests W1 to W6
+### 14.1 M1 exit tests, split into M1a and M1b (write these first). M1a (webhook intake, tests 1 to 3) is done and merged. Test 1 was re-scoped from the mock route to the signed GitHub route (ADR 0003). The dev-only mock route moved to M1b as test 12. M1b covers tests 4 to 11 and welcome tests W1 to W6 Test 5 was re-scoped to restart survival (ADR 0005).
 
 | # | Test | Proves |
 | --- | --- | --- |
@@ -540,7 +540,7 @@ Work strictly in order. A milestone is done only when every exit criterion is de
 | 2 | The same delivery ID twice creates one run | Deduplication |
 | 3 | Valid HMAC passes; a tampered body or bad signature returns `401` | Threat T8 control |
 | 4 | A run reaches `awaiting_approval` and stops | The pause works |
-| 5 | Kill the server while paused, restart, approve, and the run completes | State survives restarts |
+| 5 | A paused run survives a process restart: a new store instance loads it from SQLite and it remains `awaiting_approval` | State survives restarts (run row only; approval is tested separately) |
 | 6 | Approve with a wrong `patch_sha256` returns `409` and the run stays paused | Threat T9 control |
 | 7 | Approve on a terminal run returns `409` | Idempotency |
 | 8 | A stub forced to fail three times ends in `escalated` with 3 attempts | Loop cap |
