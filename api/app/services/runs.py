@@ -8,12 +8,12 @@ oldest run from both when the cap is reached.
 import re
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from app.domain.run import Run, run_key
-from app.domain.status import RunStatus
+from app.domain.status import RunStatus, transition
 
 
 class InvalidRunInput(ValueError):
@@ -135,6 +135,15 @@ class InMemoryRunStore:
             self._insert_locked(run)
             return run, True
 
+    def update(self, run: Run) -> None:
+        """Replace an existing run without changing its keys."""
+        with self._lock:
+            if run.run_id not in self._runs:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+            self._runs[run.run_id] = run
+            self._by_delivery[run.delivery_id] = run.run_id
+            self._by_run_key[run.run_key] = run.run_id
+
     def _insert_locked(self, run: Run) -> None:
         self._runs[run.run_id] = run
         self._by_delivery[run.delivery_id] = run.run_id
@@ -172,6 +181,27 @@ class RunService:
 
     def get_by_run_key(self, key: str) -> Run | None:
         return self._store.get_by_run_key(key)
+
+    def advance(self, run_id: str) -> Run:
+        """Move a run one fake step, leaving it paused at approval."""
+        run = self._store.get(run_id)
+        if run is None:
+            raise ValueError(f"unknown run_id: {run_id}")
+        if run.status is RunStatus.AWAITING_APPROVAL:
+            return run
+
+        next_status = {
+            RunStatus.QUEUED: RunStatus.TRIAGING,
+            RunStatus.TRIAGING: RunStatus.REPAIRING,
+            RunStatus.REPAIRING: RunStatus.VALIDATING,
+            RunStatus.VALIDATING: RunStatus.AWAITING_APPROVAL,
+        }.get(run.status)
+        if next_status is None:
+            return run
+
+        updated = replace(run, status=transition(run.status, next_status))
+        self._store.update(updated)
+        return updated
 
     def create_from_delivery(
         self,

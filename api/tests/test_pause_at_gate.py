@@ -1,7 +1,3 @@
-import pytest
-
-
-@pytest.mark.xfail(strict=True, reason="M1b: pause at gate not implemented")
 def test_run_reaches_awaiting_approval_and_stops() -> None:
     import hashlib
     import hmac
@@ -10,7 +6,7 @@ def test_run_reaches_awaiting_approval_and_stops() -> None:
     from fastapi.testclient import TestClient
 
     from app.domain.status import RunStatus
-    from app.main import app
+    from app.main import create_app
     from app.services.runs import RunService
 
     secret = "test-secret-value"  # noqa: S105 - test fixture, not a real credential
@@ -28,7 +24,7 @@ def test_run_reaches_awaiting_approval_and_stops() -> None:
     raw = json.dumps(payload).encode()
     signature = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
 
-    client = TestClient(app)
+    client = TestClient(create_app(webhook_secret=secret))
     response = client.post(
         "/webhooks/github",
         content=raw,
@@ -41,8 +37,15 @@ def test_run_reaches_awaiting_approval_and_stops() -> None:
     assert response.status_code == 202
     run_id = response.json()["run_id"]
 
-    service: RunService = app.state.run_service
-    service.advance(run_id)
+    service: RunService = client.app.state.run_service
+    for _ in range(10):  # safety bound, not the expected step count
+        run = service.store.get(run_id)
+        assert run is not None
+        if run.status is RunStatus.AWAITING_APPROVAL:
+            break
+        service.advance(run_id)
+    else:
+        raise AssertionError("run never reached awaiting_approval")
 
     run = service.store.get(run_id)
     assert run is not None
