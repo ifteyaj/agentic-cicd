@@ -1,7 +1,3 @@
-import pytest
-
-
-@pytest.mark.xfail(strict=True, reason="M1b: SQLite persistence not implemented")
 def test_paused_run_survives_restart_and_completes(tmp_path) -> None:
     import hashlib
     import hmac

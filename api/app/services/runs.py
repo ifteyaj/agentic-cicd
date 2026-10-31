@@ -6,6 +6,7 @@ oldest run from both when the cap is reached.
 """
 
 import re
+import sqlite3
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
@@ -90,7 +91,32 @@ def validate_workflow_identity(workflow_run_id: object, run_attempt: object) -> 
     return workflow_run_id, run_attempt
 
 
-class InMemoryRunStore:
+class RunStore:
+    """Common interface for run stores."""
+
+    def count(self) -> int:
+        raise NotImplementedError
+
+    def get(self, run_id: str) -> Run | None:
+        raise NotImplementedError
+
+    def get_by_delivery(self, delivery_id: str) -> Run | None:
+        raise NotImplementedError
+
+    def get_by_run_key(self, key: str) -> Run | None:
+        raise NotImplementedError
+
+    def insert(self, run: Run) -> None:
+        raise NotImplementedError
+
+    def create_if_absent(self, run: Run) -> tuple[Run, bool]:
+        raise NotImplementedError
+
+    def update(self, run: Run) -> None:
+        raise NotImplementedError
+
+
+class InMemoryRunStore(RunStore):
     """Process-local store with delivery-ID and run-key indexes."""
 
     def __init__(self, max_runs: int = 10_000) -> None:
@@ -156,6 +182,136 @@ class InMemoryRunStore:
                 del self._by_run_key[evicted.run_key]
 
 
+class SQLiteRunStore(RunStore):
+    """SQLite-backed run store, one row per run."""
+
+    def __init__(self, db_path: str, max_runs: int = 10_000) -> None:
+        self._db_path = db_path
+        self._max_runs = max_runs
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        with self._lock:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runs (
+                    run_id TEXT PRIMARY KEY,
+                    delivery_id TEXT NOT NULL UNIQUE,
+                    run_key TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    repo_url TEXT NOT NULL,
+                    commit_sha TEXT NOT NULL,
+                    workflow_run_id INTEGER NOT NULL,
+                    run_attempt INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.commit()
+
+    def count(self) -> int:
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+            return int(row[0]) if row is not None else 0
+
+    def get(self, run_id: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def get_by_delivery(self, delivery_id: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE delivery_id = ?", (delivery_id,)
+            ).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def get_by_run_key(self, key: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM runs WHERE run_key = ?", (key,)).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def insert(self, run: Run) -> None:
+        self._insert_row(run)
+
+    def create_if_absent(self, run: Run) -> tuple[Run, bool]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE delivery_id = ? OR run_key = ?",
+                (run.delivery_id, run.run_key),
+            ).fetchone()
+            if row is not None:
+                return self._row_to_run(row), False
+            self._insert_row(run)
+            return run, True
+
+    def update(self, run: Run) -> None:
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                UPDATE runs
+                SET delivery_id = ?, run_key = ?, status = ?, source = ?,
+                    repo_url = ?, commit_sha = ?, workflow_run_id = ?,
+                    run_attempt = ?, created_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    run.delivery_id,
+                    run.run_key,
+                    run.status.value,
+                    run.source,
+                    run.repo_url,
+                    run.commit_sha,
+                    run.workflow_run_id,
+                    run.run_attempt,
+                    run.created_at,
+                    run.run_id,
+                ),
+            )
+            self._conn.commit()
+            if cursor.rowcount != 1:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+
+    def _insert_row(self, run: Run) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO runs (
+                run_id, delivery_id, run_key, status, source, repo_url,
+                commit_sha, workflow_run_id, run_attempt, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run.run_id,
+                run.delivery_id,
+                run.run_key,
+                run.status.value,
+                run.source,
+                run.repo_url,
+                run.commit_sha,
+                run.workflow_run_id,
+                run.run_attempt,
+                run.created_at,
+            ),
+        )
+        self._conn.commit()
+
+    def _row_to_run(self, row: sqlite3.Row) -> Run:
+        return Run(
+            run_id=row["run_id"],
+            delivery_id=row["delivery_id"],
+            run_key=row["run_key"],
+            workflow_run_id=row["workflow_run_id"],
+            run_attempt=row["run_attempt"],
+            repo_url=row["repo_url"],
+            commit_sha=row["commit_sha"],
+            status=RunStatus(row["status"]),
+            source=row["source"],
+            created_at=row["created_at"],
+        )
+
+
 @dataclass(frozen=True)
 class CreateResult:
     run: Run
@@ -169,11 +325,11 @@ class CreateResult:
 class RunService:
     """Validate inputs and create at most one run per delivery or run key."""
 
-    def __init__(self, store: InMemoryRunStore) -> None:
+    def __init__(self, store: RunStore) -> None:
         self._store = store
 
     @property
-    def store(self) -> InMemoryRunStore:
+    def store(self) -> RunStore:
         return self._store
 
     def get_by_delivery(self, delivery_id: str) -> Run | None:
