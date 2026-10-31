@@ -23,7 +23,7 @@
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
 - `AGENTS.md` at the repository root so OpenCode auto-loads harness global
   rules and project-specific constraints (AGENTS.md adapter; source is
-  `config/global-rules.md`).
+  `config/global-rules.md`). Kept locally and not published (untracked).
 
 ## In progress
 
