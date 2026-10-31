@@ -10,7 +10,7 @@ The installable Python package and CLI inside this repository are called **`cicd
 
 ## Status
 
-Milestone 1 — webhook intake is implemented. The service exposes:
+Milestone 1 — walking skeleton implemented. The service exposes:
 
 - `GET /healthz` — liveness.
 - `POST /webhooks/github` — verifies the `X-Hub-Signature-256` HMAC over the
@@ -18,9 +18,17 @@ Milestone 1 — webhook intake is implemented. The service exposes:
   `workflow_run` events, and creates exactly one queued run per delivery ID and
   per signed `workflow_run.id:run_attempt`.
 
-The status enum, status transitions, sandbox, triage, patch generation, and the
-approval gate are still planned; the four status-machine tests remain strict
-`xfail`.
+Implemented in M1:
+
+- Run states enforced by `transition()` (15 legal transitions).
+- Pause at `AWAITING_APPROVAL`; a run survives a restart via the SQLite run row.
+- Approval endpoint with patch-hash check (wrong hash and terminal runs return 409).
+- Three failed validation attempts escalate the run.
+- Events table with database-assigned IDs, SSE replay with `Last-Event-ID`.
+- Payload redaction before storage and a CLI welcome screen.
+
+Still planned: sandbox execution, triage, patch generation, and publishing.
+A valid approval currently returns `501` because publishing is not implemented.
 
 ## Webhook intake
 
