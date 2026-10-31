@@ -1,7 +1,3 @@
-import pytest
-
-
-@pytest.mark.xfail(strict=True, reason="M1b: SSE replay not implemented")
 def test_reconnect_with_last_event_id_replays_only_missed_events(tmp_path) -> None:
     import hashlib
     import hmac
