@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI
 from starlette.types import Receive, Scope, Send
@@ -14,15 +14,16 @@ def create_app(
     run_service: RunService | None = None,
     webhook_secret: str | None = None,
     db_path: str | None = None,
+    stub_mode: Literal["pass", "fail"] = "pass",
 ) -> FastAPI:
     application = FastAPI(title="cicd-agent", version="0.0.0")
 
     if run_service is not None:
         application.state.run_service = run_service
     elif db_path is not None:
-        application.state.run_service = RunService(SQLiteRunStore(db_path))
+        application.state.run_service = RunService(SQLiteRunStore(db_path), stub_mode=stub_mode)
     else:
-        application.state.run_service = RunService(InMemoryRunStore())
+        application.state.run_service = RunService(InMemoryRunStore(), stub_mode=stub_mode)
     if webhook_secret is not None:
         application.state.webhook_secret = webhook_secret
     else:

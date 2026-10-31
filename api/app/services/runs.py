@@ -11,6 +11,7 @@ import sqlite3
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -407,8 +408,9 @@ class CreateResult:
 class RunService:
     """Validate inputs and create at most one run per delivery or run key."""
 
-    def __init__(self, store: RunStore) -> None:
+    def __init__(self, store: RunStore, stub_mode: Literal["pass", "fail"] = "pass") -> None:
         self._store = store
+        self.stub_mode = stub_mode
 
     @property
     def store(self) -> RunStore:
@@ -432,8 +434,13 @@ class RunService:
             RunStatus.QUEUED: RunStatus.TRIAGING,
             RunStatus.TRIAGING: RunStatus.REPAIRING,
             RunStatus.REPAIRING: RunStatus.VALIDATING,
-            RunStatus.VALIDATING: RunStatus.AWAITING_APPROVAL,
         }.get(run.status)
+        if run.status is RunStatus.VALIDATING:
+            if self.stub_mode == "fail":
+                attempts = len(self._store.list_attempts(run.run_id))
+                next_status = RunStatus.REPAIRING if attempts < 3 else RunStatus.ESCALATED
+            else:
+                next_status = RunStatus.AWAITING_APPROVAL
         if next_status is None:
             return run
 

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     github_webhook_secret: SecretStr | None = None
     env: Literal["dev", "production"] = "production"
+    stub_mode: Literal["pass", "fail"] = "pass"
 
 
 def is_usable_webhook_secret(secret: str | None) -> bool:
