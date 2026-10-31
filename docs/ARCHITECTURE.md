@@ -1,7 +1,7 @@
 # Architecture
 
-**Status:** Current (M0 + M1 webhook intake, implemented)\
-**Last updated:** 2026-10-26
+**Status:** Current (M1 walking skeleton implemented: webhook intake + run lifecycle)\
+**Last updated:** 2026-10-31
 
 ## System context
 
@@ -35,7 +35,7 @@ GitHub Actions failure
 | `app.domain` | Run/status types and transitions | stdlib only |
 | `app.config` | Environment-backed settings | pydantic-settings |
 | [planned] sandbox | Execute a patch against fixtures | container runtime |
-| [planned] store | SQLite persistence | ADR 0001 |
+| store | SQLite persistence (run rows, attempts, events) | ADR 0001 |
 
 ## Data flow (M1)
 
@@ -59,12 +59,14 @@ GitHub Actions failure
 | Entity | Key fields | Ownership |
 | --- | --- | --- |
 | Run | `run_id`, `delivery_id`, `run_key`, `workflow_run_id`, `run_attempt`, `repo_url`, `commit_sha`, `status` | `app.domain.run` |
-| RunStatus | Full lifecycle enum; M1 creates `QUEUED` only | `app.domain.status` |
-| InMemoryRunStore | Two indexes over the same runs; 10,000-run cap | `app.services.runs` |
+| RunStatus | Full lifecycle enum; runs advance through it via `transition()` | `app.domain.status` |
+| InMemoryRunStore | Test double; two indexes over the same runs; 10,000-run cap | `app.services.runs` |
+| SQLiteRunStore | SQLite-backed run, attempt, and event rows; survives restart | `app.services.runs` |
 
-The store is process-local and is replaced by SQLite in a later milestone. It is
-capped at 10,000 runs and evicts the oldest run from both indexes, so the
-idempotency guarantee holds while a run is retained.
+The in-memory store is a test double: it is process-local, capped at 10,000
+runs, and evicts the oldest run from both indexes, so the idempotency guarantee
+holds while a run is retained. The SQLite store persists run, attempt, and
+event rows.
 
 ## Boundaries and invariants
 
@@ -97,8 +99,9 @@ idempotency guarantee holds while a run is retained.
 
 ## Known limitations
 
-- No persistence; dedupe is lost on restart.
+- SQLite store persists run rows and events; the in-memory store is a test double and is process-local.
 - Single-process only. Multiple workers would each hold a separate store.
 - The in-memory store is capped at 10,000 runs and evicts the oldest.
 - No authentication beyond webhook signature verification.
-- No sandbox, triage, patch generation, or approval gate implementation yet.
+- No sandbox, triage, patch generation, or publishing implementation yet.
+- The approval gate exists as state and endpoint; valid approval currently returns 501.

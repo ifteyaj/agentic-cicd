@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31\
 **Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed.\
-**Branch:** feature/m1b-pause-resume. Draft PR 4 into main, ready for review.
+**Branch:** `main` (PRs #4, #5, #6, #7 merged).
 
 ## What works
 
