@@ -1,14 +1,14 @@
 # Roadmap
 
-**Last updated:** 2026-10-26
+**Last updated:** 2026-10-31
 
 ## Now — M1 intake and validation foundation
 
 - [x] M0 scaffold, health endpoint, fixtures, CI
 - [x] M1 webhook intake: signature verification, idempotent run creation
-- [ ] M1 status machine and illegal-transition protection
-- [ ] M1 sandbox validation loop (up to 3 attempts)
-- [ ] M1 human approval gate after validation
+- [x] M1 status machine and illegal-transition protection
+- [ ] M1 sandbox validation loop (up to 3 attempts) — not yet implemented
+- [x] M1 human approval gate after validation (publish pending)
 
 ## Next — M2 evaluation
 
@@ -35,6 +35,6 @@
 | Milestone | Outcome | Target | Status |
 | --- | --- | --- | --- |
 | M0 | Skeleton, health, fixtures, CI | 2026-10-26 | Done |
-| M1 | Verified patch reaches approval gate | TBD | In progress |
+| M1 | Verified patch reaches approval gate | TBD | In progress (walking skeleton complete; sandbox pending) |
 | M2 | Headless evaluation over fixtures | TBD | Planned |
 | M3 | Persistence and deployment | TBD | Planned |

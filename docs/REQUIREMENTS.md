@@ -1,7 +1,7 @@
 # Requirements
 
-**Status:** Implemented for FR-1 through FR-4\
-**Last updated:** 2026-10-26
+**Status:** FR-1 through FR-4 implemented; M1 walking skeleton (run states, approval gate, SQLite run/events, redaction) implemented. FR-5 through FR-9 remain planned.\
+**Last updated:** 2026-10-31
 
 ## Functional requirements
 
@@ -17,7 +17,7 @@
 | FR-8 | Require human approval after validation | Must | No publish transition without approval |
 | FR-9 | Publish an approved patch | Could | PR or branch push after approval |
 
-M1 implements FR-1 through FR-4. FR-5 through FR-9 remain planned.
+M1 implements FR-1 through FR-4 plus the run state machine and human-approval transition (FR-8 partially: endpoint and state gate implemented; publishing (FR-9) not implemented). FR-5, FR-6, FR-7, and publishing remain planned.
 
 ## Non-functional requirements
 
