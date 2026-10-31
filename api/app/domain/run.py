@@ -3,7 +3,8 @@
 This module has no framework imports.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from app.domain.status import RunStatus
 
@@ -24,3 +25,4 @@ class Run:
     commit_sha: str
     status: RunStatus = RunStatus.QUEUED
     source: str = "webhook"
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())

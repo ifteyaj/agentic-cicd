@@ -5,15 +5,22 @@ boundary. The store keeps two indexes over the same runs and evicts the
 oldest run from both when the cap is reached.
 """
 
+import hashlib
+import json
 import re
+import sqlite3
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from app.domain.attempt import FIXED_FAKE_PATCH, Attempt
 from app.domain.run import Run, run_key
-from app.domain.status import RunStatus
+from app.domain.status import RunStatus, transition
+from app.services.redaction import redact
 
 
 class InvalidRunInput(ValueError):
@@ -90,7 +97,59 @@ def validate_workflow_identity(workflow_run_id: object, run_attempt: object) -> 
     return workflow_run_id, run_attempt
 
 
-class InMemoryRunStore:
+@dataclass(frozen=True, slots=True)
+class Event:
+    event_id: int
+    run_id: str
+    ts: str
+    type: str
+    payload: str
+
+
+class RunStore:
+    """Common interface for run stores."""
+
+    def count(self) -> int:
+        raise NotImplementedError
+
+    def get(self, run_id: str) -> Run | None:
+        raise NotImplementedError
+
+    def get_by_delivery(self, delivery_id: str) -> Run | None:
+        raise NotImplementedError
+
+    def get_by_run_key(self, key: str) -> Run | None:
+        raise NotImplementedError
+
+    def insert(self, run: Run) -> None:
+        raise NotImplementedError
+
+    def create_if_absent(self, run: Run) -> tuple[Run, bool]:
+        raise NotImplementedError
+
+    def update(self, run: Run) -> None:
+        raise NotImplementedError
+
+    def update_with_event(self, run: Run, event_type: str, payload: str) -> None:
+        raise NotImplementedError
+
+    def record_attempt(self, attempt: Attempt) -> None:
+        raise NotImplementedError
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        raise NotImplementedError
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        raise NotImplementedError
+
+    def record_event(self, run_id: str, event_type: str, payload: str) -> Event:
+        raise NotImplementedError
+
+    def list_events(self, run_id: str, after_event_id: int = 0) -> list[Event]:
+        raise NotImplementedError
+
+
+class InMemoryRunStore(RunStore):
     """Process-local store with delivery-ID and run-key indexes."""
 
     def __init__(self, max_runs: int = 10_000) -> None:
@@ -101,6 +160,10 @@ class InMemoryRunStore:
         self._runs: OrderedDict[str, Run] = OrderedDict()
         self._by_delivery: dict[str, str] = {}
         self._by_run_key: dict[str, str] = {}
+        self._attempts: dict[str, Attempt] = {}
+        self._attempts_by_run: dict[str, list[str]] = {}
+        self._events: list[Event] = []
+        self._next_event_id: int = 1
 
     def count(self) -> int:
         with self._lock:
@@ -135,6 +198,72 @@ class InMemoryRunStore:
             self._insert_locked(run)
             return run, True
 
+    def update(self, run: Run) -> None:
+        """Replace an existing run without changing its keys."""
+        with self._lock:
+            if run.run_id not in self._runs:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+            self._runs[run.run_id] = run
+            self._by_delivery[run.delivery_id] = run.run_id
+            self._by_run_key[run.run_key] = run.run_id
+
+    def update_with_event(self, run: Run, event_type: str, payload: str) -> None:
+        with self._lock:
+            if run.run_id not in self._runs:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+            self._runs[run.run_id] = run
+            self._by_delivery[run.delivery_id] = run.run_id
+            self._by_run_key[run.run_key] = run.run_id
+            event = Event(
+                event_id=self._next_event_id,
+                run_id=run.run_id,
+                ts=datetime.now(UTC).isoformat(),
+                type=event_type,
+                payload=payload,
+            )
+            self._next_event_id += 1
+            self._events.append(event)
+
+    def record_attempt(self, attempt: Attempt) -> None:
+        with self._lock:
+            self._attempts[attempt.attempt_id] = attempt
+            attempt_ids = self._attempts_by_run.setdefault(attempt.run_id, [])
+            if attempt.attempt_id not in attempt_ids:
+                attempt_ids.append(attempt.attempt_id)
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        with self._lock:
+            return self._attempts.get(attempt_id)
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        with self._lock:
+            return [
+                self._attempts[attempt_id]
+                for attempt_id in self._attempts_by_run.get(run_id, [])
+                if attempt_id in self._attempts
+            ]
+
+    def record_event(self, run_id: str, event_type: str, payload: str) -> Event:
+        with self._lock:
+            event = Event(
+                event_id=self._next_event_id,
+                run_id=run_id,
+                ts=datetime.now(UTC).isoformat(),
+                type=event_type,
+                payload=payload,
+            )
+            self._next_event_id += 1
+            self._events.append(event)
+            return event
+
+    def list_events(self, run_id: str, after_event_id: int = 0) -> list[Event]:
+        with self._lock:
+            return [
+                event
+                for event in self._events
+                if event.run_id == run_id and event.event_id > after_event_id
+            ]
+
     def _insert_locked(self, run: Run) -> None:
         self._runs[run.run_id] = run
         self._by_delivery[run.delivery_id] = run.run_id
@@ -145,6 +274,268 @@ class InMemoryRunStore:
                 del self._by_delivery[evicted.delivery_id]
             if self._by_run_key.get(evicted.run_key) == evicted.run_id:
                 del self._by_run_key[evicted.run_key]
+
+
+class SQLiteRunStore(RunStore):
+    """SQLite-backed run store, one row per run."""
+
+    def __init__(self, db_path: str, max_runs: int = 10_000) -> None:
+        self._db_path = db_path
+        self._max_runs = max_runs
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        with self._lock:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runs (
+                    run_id TEXT PRIMARY KEY,
+                    delivery_id TEXT NOT NULL UNIQUE,
+                    run_key TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    repo_url TEXT NOT NULL,
+                    commit_sha TEXT NOT NULL,
+                    workflow_run_id INTEGER NOT NULL,
+                    run_attempt INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES runs (run_id),
+                    n INTEGER NOT NULL,
+                    patch_sha256 TEXT NOT NULL,
+                    patch_diff TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    ts TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    payload TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_run_id_event_id ON events(run_id, event_id)"
+            )
+            self._conn.commit()
+
+    def count(self) -> int:
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+            return int(row[0]) if row is not None else 0
+
+    def get(self, run_id: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def get_by_delivery(self, delivery_id: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE delivery_id = ?", (delivery_id,)
+            ).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def get_by_run_key(self, key: str) -> Run | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM runs WHERE run_key = ?", (key,)).fetchone()
+            return self._row_to_run(row) if row is not None else None
+
+    def insert(self, run: Run) -> None:
+        self._insert_row(run)
+
+    def create_if_absent(self, run: Run) -> tuple[Run, bool]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE delivery_id = ? OR run_key = ?",
+                (run.delivery_id, run.run_key),
+            ).fetchone()
+            if row is not None:
+                return self._row_to_run(row), False
+            self._insert_row(run)
+            return run, True
+
+    def update(self, run: Run) -> None:
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                UPDATE runs
+                SET delivery_id = ?, run_key = ?, status = ?, source = ?,
+                    repo_url = ?, commit_sha = ?, workflow_run_id = ?,
+                    run_attempt = ?, created_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    run.delivery_id,
+                    run.run_key,
+                    run.status.value,
+                    run.source,
+                    run.repo_url,
+                    run.commit_sha,
+                    run.workflow_run_id,
+                    run.run_attempt,
+                    run.created_at,
+                    run.run_id,
+                ),
+            )
+            self._conn.commit()
+            if cursor.rowcount != 1:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+
+    def update_with_event(self, run: Run, event_type: str, payload: str) -> None:
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                UPDATE runs
+                SET delivery_id = ?, run_key = ?, status = ?, source = ?,
+                    repo_url = ?, commit_sha = ?, workflow_run_id = ?,
+                    run_attempt = ?, created_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    run.delivery_id,
+                    run.run_key,
+                    run.status.value,
+                    run.source,
+                    run.repo_url,
+                    run.commit_sha,
+                    run.workflow_run_id,
+                    run.run_attempt,
+                    run.created_at,
+                    run.run_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"unknown run_id: {run.run_id}")
+            timestamp = datetime.now(UTC).isoformat()
+            self._conn.execute(
+                "INSERT INTO events (run_id, ts, type, payload) VALUES (?, ?, ?, ?)",
+                (run.run_id, timestamp, event_type, payload),
+            )
+            self._conn.commit()
+
+    def record_attempt(self, attempt: Attempt) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO attempts "
+                "(attempt_id, run_id, n, patch_sha256, patch_diff) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    attempt.attempt_id,
+                    attempt.run_id,
+                    attempt.n,
+                    attempt.patch_sha256,
+                    attempt.patch_diff,
+                ),
+            )
+            self._conn.commit()
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM attempts WHERE attempt_id = ?", (attempt_id,)
+            ).fetchone()
+            return self._row_to_attempt(row) if row is not None else None
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM attempts WHERE run_id = ? ORDER BY n", (run_id,)
+            ).fetchall()
+            return [self._row_to_attempt(row) for row in rows]
+
+    def _row_to_attempt(self, row: sqlite3.Row) -> Attempt:
+        return Attempt(
+            attempt_id=row["attempt_id"],
+            run_id=row["run_id"],
+            n=row["n"],
+            patch_sha256=row["patch_sha256"],
+            patch_diff=row["patch_diff"],
+        )
+
+    def record_event(self, run_id: str, event_type: str, payload: str) -> Event:
+        with self._lock:
+            timestamp = datetime.now(UTC).isoformat()
+            cursor = self._conn.execute(
+                "INSERT INTO events (run_id, ts, type, payload) VALUES (?, ?, ?, ?)",
+                (run_id, timestamp, event_type, payload),
+            )
+            self._conn.commit()
+            event_id = cursor.lastrowid
+            if event_id is None:
+                raise RuntimeError("failed to assign event_id")
+            return Event(
+                event_id=int(event_id),
+                run_id=run_id,
+                ts=timestamp,
+                type=event_type,
+                payload=payload,
+            )
+
+    def list_events(self, run_id: str, after_event_id: int = 0) -> list[Event]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM events WHERE run_id = ? AND event_id > ? ORDER BY event_id",
+                (run_id, after_event_id),
+            ).fetchall()
+            return [self._row_to_event(row) for row in rows]
+
+    def _row_to_event(self, row: sqlite3.Row) -> Event:
+        return Event(
+            event_id=row["event_id"],
+            run_id=row["run_id"],
+            ts=row["ts"],
+            type=row["type"],
+            payload=row["payload"],
+        )
+
+    def _insert_row(self, run: Run) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO runs (
+                run_id, delivery_id, run_key, status, source, repo_url,
+                commit_sha, workflow_run_id, run_attempt, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run.run_id,
+                run.delivery_id,
+                run.run_key,
+                run.status.value,
+                run.source,
+                run.repo_url,
+                run.commit_sha,
+                run.workflow_run_id,
+                run.run_attempt,
+                run.created_at,
+            ),
+        )
+        self._conn.commit()
+
+    def _row_to_run(self, row: sqlite3.Row) -> Run:
+        return Run(
+            run_id=row["run_id"],
+            delivery_id=row["delivery_id"],
+            run_key=row["run_key"],
+            workflow_run_id=row["workflow_run_id"],
+            run_attempt=row["run_attempt"],
+            repo_url=row["repo_url"],
+            commit_sha=row["commit_sha"],
+            status=RunStatus(row["status"]),
+            source=row["source"],
+            created_at=row["created_at"],
+        )
 
 
 @dataclass(frozen=True)
@@ -160,11 +551,12 @@ class CreateResult:
 class RunService:
     """Validate inputs and create at most one run per delivery or run key."""
 
-    def __init__(self, store: InMemoryRunStore) -> None:
+    def __init__(self, store: RunStore, stub_mode: Literal["pass", "fail"] = "pass") -> None:
         self._store = store
+        self.stub_mode = stub_mode
 
     @property
-    def store(self) -> InMemoryRunStore:
+    def store(self) -> RunStore:
         return self._store
 
     def get_by_delivery(self, delivery_id: str) -> Run | None:
@@ -172,6 +564,54 @@ class RunService:
 
     def get_by_run_key(self, key: str) -> Run | None:
         return self._store.get_by_run_key(key)
+
+    def advance(self, run_id: str) -> Run:
+        """Move a run one fake step, leaving it paused at approval."""
+        run = self._store.get(run_id)
+        if run is None:
+            raise ValueError(f"unknown run_id: {run_id}")
+        if run.status is RunStatus.AWAITING_APPROVAL:
+            return run
+
+        next_status = {
+            RunStatus.QUEUED: RunStatus.TRIAGING,
+            RunStatus.TRIAGING: RunStatus.REPAIRING,
+            RunStatus.REPAIRING: RunStatus.VALIDATING,
+        }.get(run.status)
+        if run.status is RunStatus.VALIDATING:
+            if self.stub_mode == "fail":
+                attempts = len(self._store.list_attempts(run.run_id))
+                next_status = RunStatus.REPAIRING if attempts < 3 else RunStatus.ESCALATED
+            else:
+                next_status = RunStatus.AWAITING_APPROVAL
+        if next_status is None:
+            return run
+
+        if next_status is RunStatus.VALIDATING:
+            attempt_number = len(self._store.list_attempts(run.run_id)) + 1
+            self._store.record_attempt(
+                Attempt(
+                    attempt_id=str(uuid4()),
+                    run_id=run.run_id,
+                    n=attempt_number,
+                    patch_sha256=hashlib.sha256(FIXED_FAKE_PATCH.encode()).hexdigest(),
+                    patch_diff=FIXED_FAKE_PATCH,
+                )
+            )
+
+        redacted_payload = redact(
+            json.dumps({"from": run.status.value, "to": next_status.value}, separators=(",", ":"))
+        )
+        updated = replace(run, status=transition(run.status, next_status))
+        self._store.update_with_event(updated, "run.status_changed", redacted_payload)
+        return updated
+
+    def record_event(self, run_id: str, event_type: str, payload: object) -> Event:
+        payload_json = redact(json.dumps(payload, separators=(",", ":")))
+        return self._store.record_event(run_id, event_type, payload_json)
+
+    def list_events(self, run_id: str, after_event_id: int = 0) -> list[Event]:
+        return self._store.list_events(run_id, after_event_id)
 
     def create_from_delivery(
         self,

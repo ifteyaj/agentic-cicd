@@ -1,20 +1,29 @@
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI
 from starlette.types import Receive, Scope, Send
 
 from app.config import Settings
+from app.routes.runs import router as runs_router
 from app.routes.webhooks import mock_router
 from app.routes.webhooks import router as webhooks_router
-from app.services.runs import InMemoryRunStore, RunService
+from app.services.runs import InMemoryRunStore, RunService, SQLiteRunStore
 
 
-def create_app(run_service: RunService | None = None, webhook_secret: str | None = None) -> FastAPI:
+def create_app(
+    run_service: RunService | None = None,
+    webhook_secret: str | None = None,
+    db_path: str | None = None,
+    stub_mode: Literal["pass", "fail"] = "pass",
+) -> FastAPI:
     application = FastAPI(title="cicd-agent", version="0.0.0")
 
-    application.state.run_service = (
-        run_service if run_service is not None else RunService(InMemoryRunStore())
-    )
+    if run_service is not None:
+        application.state.run_service = run_service
+    elif db_path is not None:
+        application.state.run_service = RunService(SQLiteRunStore(db_path), stub_mode=stub_mode)
+    else:
+        application.state.run_service = RunService(InMemoryRunStore(), stub_mode=stub_mode)
     if webhook_secret is not None:
         application.state.webhook_secret = webhook_secret
     else:
@@ -26,6 +35,7 @@ def create_app(run_service: RunService | None = None, webhook_secret: str | None
         return {"status": "ok"}
 
     application.include_router(webhooks_router)
+    application.include_router(runs_router)
     if Settings().env == "dev":
         application.include_router(mock_router)
     return application

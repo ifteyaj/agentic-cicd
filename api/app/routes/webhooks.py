@@ -169,6 +169,12 @@ async def github_webhook(request: Request) -> Response:
     if not result.created:
         return _duplicate(result.run_id)
 
+    service.record_event(
+        result.run_id,
+        "run.created",
+        {"run_id": result.run_id, "source": result.run.source},
+    )
+
     logger.info(
         "created run delivery_id=%s repo_url=%s run_id=%s content_sha256=%s",
         delivery_id,
