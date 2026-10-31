@@ -12,3 +12,7 @@ data/
 .DS_Store
 .kombai/
 graphify-out/
+
+# Local agent instructions (not published)
+AGENTS.md
+CLAUDE.md
