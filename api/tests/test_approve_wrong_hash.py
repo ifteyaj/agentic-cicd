@@ -1,7 +1,3 @@
-import pytest
-
-
-@pytest.mark.xfail(strict=True, reason="M1b: approval endpoint not implemented")
 def test_approve_with_wrong_patch_hash_returns_409_and_stays_paused() -> None:
     import hashlib
     import hmac

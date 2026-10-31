@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from starlette.types import Receive, Scope, Send
 
 from app.config import Settings
+from app.routes.runs import router as runs_router
 from app.routes.webhooks import mock_router
 from app.routes.webhooks import router as webhooks_router
 from app.services.runs import InMemoryRunStore, RunService, SQLiteRunStore
@@ -33,6 +34,7 @@ def create_app(
         return {"status": "ok"}
 
     application.include_router(webhooks_router)
+    application.include_router(runs_router)
     if Settings().env == "dev":
         application.include_router(mock_router)
     return application

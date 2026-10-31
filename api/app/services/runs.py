@@ -5,6 +5,7 @@ boundary. The store keeps two indexes over the same runs and evicts the
 oldest run from both when the cap is reached.
 """
 
+import hashlib
 import re
 import sqlite3
 import threading
@@ -13,6 +14,7 @@ from dataclasses import dataclass, replace
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from app.domain.attempt import FIXED_FAKE_PATCH, Attempt
 from app.domain.run import Run, run_key
 from app.domain.status import RunStatus, transition
 
@@ -115,6 +117,15 @@ class RunStore:
     def update(self, run: Run) -> None:
         raise NotImplementedError
 
+    def record_attempt(self, attempt: Attempt) -> None:
+        raise NotImplementedError
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        raise NotImplementedError
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        raise NotImplementedError
+
 
 class InMemoryRunStore(RunStore):
     """Process-local store with delivery-ID and run-key indexes."""
@@ -127,6 +138,8 @@ class InMemoryRunStore(RunStore):
         self._runs: OrderedDict[str, Run] = OrderedDict()
         self._by_delivery: dict[str, str] = {}
         self._by_run_key: dict[str, str] = {}
+        self._attempts: dict[str, Attempt] = {}
+        self._attempts_by_run: dict[str, list[str]] = {}
 
     def count(self) -> int:
         with self._lock:
@@ -170,6 +183,25 @@ class InMemoryRunStore(RunStore):
             self._by_delivery[run.delivery_id] = run.run_id
             self._by_run_key[run.run_key] = run.run_id
 
+    def record_attempt(self, attempt: Attempt) -> None:
+        with self._lock:
+            self._attempts[attempt.attempt_id] = attempt
+            attempt_ids = self._attempts_by_run.setdefault(attempt.run_id, [])
+            if attempt.attempt_id not in attempt_ids:
+                attempt_ids.append(attempt.attempt_id)
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        with self._lock:
+            return self._attempts.get(attempt_id)
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        with self._lock:
+            return [
+                self._attempts[attempt_id]
+                for attempt_id in self._attempts_by_run.get(run_id, [])
+                if attempt_id in self._attempts
+            ]
+
     def _insert_locked(self, run: Run) -> None:
         self._runs[run.run_id] = run
         self._by_delivery[run.delivery_id] = run.run_id
@@ -206,6 +238,17 @@ class SQLiteRunStore(RunStore):
                     workflow_run_id INTEGER NOT NULL,
                     run_attempt INTEGER NOT NULL,
                     created_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES runs (run_id),
+                    n INTEGER NOT NULL,
+                    patch_sha256 TEXT NOT NULL,
+                    patch_diff TEXT NOT NULL
                 )
                 """
             )
@@ -273,6 +316,45 @@ class SQLiteRunStore(RunStore):
             self._conn.commit()
             if cursor.rowcount != 1:
                 raise ValueError(f"unknown run_id: {run.run_id}")
+
+    def record_attempt(self, attempt: Attempt) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO attempts "
+                "(attempt_id, run_id, n, patch_sha256, patch_diff) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    attempt.attempt_id,
+                    attempt.run_id,
+                    attempt.n,
+                    attempt.patch_sha256,
+                    attempt.patch_diff,
+                ),
+            )
+            self._conn.commit()
+
+    def get_attempt(self, attempt_id: str) -> Attempt | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM attempts WHERE attempt_id = ?", (attempt_id,)
+            ).fetchone()
+            return self._row_to_attempt(row) if row is not None else None
+
+    def list_attempts(self, run_id: str) -> list[Attempt]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM attempts WHERE run_id = ? ORDER BY n", (run_id,)
+            ).fetchall()
+            return [self._row_to_attempt(row) for row in rows]
+
+    def _row_to_attempt(self, row: sqlite3.Row) -> Attempt:
+        return Attempt(
+            attempt_id=row["attempt_id"],
+            run_id=row["run_id"],
+            n=row["n"],
+            patch_sha256=row["patch_sha256"],
+            patch_diff=row["patch_diff"],
+        )
 
     def _insert_row(self, run: Run) -> None:
         self._conn.execute(
@@ -354,6 +436,18 @@ class RunService:
         }.get(run.status)
         if next_status is None:
             return run
+
+        if next_status is RunStatus.VALIDATING:
+            attempt_number = len(self._store.list_attempts(run.run_id)) + 1
+            self._store.record_attempt(
+                Attempt(
+                    attempt_id=str(uuid4()),
+                    run_id=run.run_id,
+                    n=attempt_number,
+                    patch_sha256=hashlib.sha256(FIXED_FAKE_PATCH.encode()).hexdigest(),
+                    patch_diff=FIXED_FAKE_PATCH,
+                )
+            )
 
         updated = replace(run, status=transition(run.status, next_status))
         self._store.update(updated)
