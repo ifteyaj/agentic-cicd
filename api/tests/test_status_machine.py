@@ -1,7 +1,6 @@
 import pytest
 
 
-@pytest.mark.xfail(strict=True, reason="M1: status machine not implemented")
 def test_happy_path_reaches_completed() -> None:
     from app.domain.status import RunStatus, transition
 
@@ -18,14 +17,12 @@ def test_happy_path_reaches_completed() -> None:
     assert status is RunStatus.COMPLETED
 
 
-@pytest.mark.xfail(strict=True, reason="M1: status machine not implemented")
 def test_validation_can_loop_back_to_repair() -> None:
     from app.domain.status import RunStatus, transition
 
     assert transition(RunStatus.VALIDATING, RunStatus.REPAIRING) is RunStatus.REPAIRING
 
 
-@pytest.mark.xfail(strict=True, reason="M1: status machine not implemented")
 def test_skipping_validation_is_illegal() -> None:
     from app.domain.status import IllegalTransition, RunStatus, transition
 
@@ -33,7 +30,6 @@ def test_skipping_validation_is_illegal() -> None:
         transition(RunStatus.REPAIRING, RunStatus.AWAITING_APPROVAL)
 
 
-@pytest.mark.xfail(strict=True, reason="M1: status machine not implemented")
 def test_terminal_states_cannot_move() -> None:
     from app.domain.status import IllegalTransition, RunStatus, transition
 
