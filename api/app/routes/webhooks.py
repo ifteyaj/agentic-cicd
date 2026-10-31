@@ -198,12 +198,16 @@ async def mock_webhook(request: Request) -> Response:
 
     service: RunService = request.app.state.run_service
     mock_id = uuid4()
+    workflow_run_id = mock_id.int >> 65
+    while workflow_run_id == 0:
+        mock_id = uuid4()
+        workflow_run_id = mock_id.int >> 65
     try:
         result = service.create_from_delivery(
             str(mock_id),
             repo_url=repo_url,
             commit_sha=commit_sha,
-            workflow_run_id=mock_id.int,
+            workflow_run_id=workflow_run_id,
             run_attempt=1,
             source="mock",
         )
