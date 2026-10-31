@@ -1,3 +1,5 @@
+![Preview](preview.png)
+
 # agentic-cicd
 
 Verified CI-fix agent: when a GitHub Actions run fails, it triages the failure, proposes a
