@@ -1,3 +1,4 @@
+import os
 from typing import Any, Literal
 
 from fastapi import FastAPI
@@ -10,14 +11,23 @@ from app.routes.webhooks import router as webhooks_router
 from app.services.runs import InMemoryRunStore, RunService, SQLiteRunStore
 
 
+def _resolve_allowed_repos(allowed_repos: list[str] | None) -> list[str]:
+    if allowed_repos is not None:
+        return allowed_repos
+    raw = os.environ.get("CICD_AGENT_ALLOWED_REPOS", "")
+    return [entry.strip() for entry in raw.split(",") if entry.strip()]
+
+
 def create_app(
     run_service: RunService | None = None,
     webhook_secret: str | None = None,
     db_path: str | None = None,
     stub_mode: Literal["pass", "fail"] = "pass",
+    allowed_repos: list[str] | None = None,
 ) -> FastAPI:
     application = FastAPI(title="cicd-agent", version="0.0.0")
 
+    application.state.allowed_repos = _resolve_allowed_repos(allowed_repos)
     if run_service is not None:
         application.state.run_service = run_service
     elif db_path is not None:

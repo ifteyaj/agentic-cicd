@@ -25,7 +25,9 @@ def test_reconnect_with_last_event_id_replays_only_missed_events(tmp_path) -> No
     signature = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
 
     db_path = tmp_path / "events.db"
-    client = TestClient(create_app(webhook_secret=secret, db_path=str(db_path)))
+    client = TestClient(
+        create_app(webhook_secret=secret, db_path=str(db_path), allowed_repos=["example/repo"])
+    )
     response = client.post(
         "/api/webhooks/github",
         content=raw,

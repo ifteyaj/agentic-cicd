@@ -44,7 +44,9 @@ def _client(
 ) -> tuple[TestClient, InMemoryRunStore]:
     store = store if store is not None else InMemoryRunStore()
     service = RunService(store)
-    return TestClient(create_app(run_service=service, webhook_secret=secret)), store
+    return TestClient(
+        create_app(run_service=service, webhook_secret=secret, allowed_repos=["example/repo"])
+    ), store
 
 
 def _post(
@@ -379,7 +381,11 @@ def test_missing_payload_sections_return_422(missing: str) -> None:
 
 def test_concurrent_duplicates_create_one_run() -> None:
     store = InMemoryRunStore()
-    application = create_app(run_service=RunService(store), webhook_secret=SECRET)
+    application = create_app(
+        run_service=RunService(store),
+        webhook_secret=SECRET,
+        allowed_repos=["example/repo"],
+    )
     payload = json.dumps(_payload()).encode()
     signature = _sign(payload)
     headers = {

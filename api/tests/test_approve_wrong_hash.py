@@ -24,7 +24,7 @@ def test_approve_with_wrong_patch_hash_returns_409_and_stays_paused() -> None:
     raw = json.dumps(payload).encode()
     signature = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
 
-    client = TestClient(create_app(webhook_secret=secret))
+    client = TestClient(create_app(webhook_secret=secret, allowed_repos=["example/repo"]))
     response = client.post(
         "/api/webhooks/github",
         content=raw,

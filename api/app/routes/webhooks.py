@@ -48,6 +48,23 @@ def _content_hash(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
+_GITHUB_PREFIX = "https://github.com/"
+
+
+def _repo_slug(clone_url: object) -> str | None:
+    if not isinstance(clone_url, str) or not clone_url.startswith(_GITHUB_PREFIX):
+        return None
+    slug = clone_url[len(_GITHUB_PREFIX) :]
+    if slug.endswith(".git"):
+        slug = slug[:-4]
+    return slug or None
+
+
+def _repo_allowed(clone_url: object, allowed_repos: list[str]) -> bool:
+    slug = _repo_slug(clone_url)
+    return slug is not None and slug in allowed_repos
+
+
 def _extract(payload: dict[str, object]) -> tuple[str, str, str, str, object, object]:
     action = payload.get("action")
     workflow_run = payload.get("workflow_run")
@@ -145,6 +162,10 @@ async def github_webhook(request: Request) -> Response:
     except InvalidRunInput as exc:
         return _error(422, str(exc))
 
+    allowed_repos: list[str] = request.app.state.allowed_repos
+    if not _repo_allowed(clone_url, allowed_repos):
+        return _error(403, "repository not allowed")
+
     existing = service.get_by_run_key(run_key(workflow_run_id, run_attempt))
     if existing is not None:
         logger.info(
@@ -201,6 +222,10 @@ async def mock_webhook(request: Request) -> Response:
         commit_sha = validate_commit_sha(commit_sha_raw)
     except InvalidRunInput as exc:
         return _error(422, str(exc))
+
+    allowed_repos: list[str] = request.app.state.allowed_repos
+    if not _repo_allowed(repo_url_raw, allowed_repos):
+        return _error(403, "repository not allowed")
 
     service: RunService = request.app.state.run_service
     mock_id = uuid4()
