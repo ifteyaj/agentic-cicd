@@ -13,15 +13,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-_columns = os.environ.get("COLUMNS", "")
-try:
-    _columns_ok = int(_columns) >= 40
-except (TypeError, ValueError):
-    _columns_ok = False
-if not _columns_ok:
-    os.environ["COLUMNS"] = "120"
-
-app = typer.Typer(help="cicd-agent command line")
+app = typer.Typer(help="cicd-agent command line", rich_markup_mode=None)
 
 _STDOUT = sys.stdout
 _DEFAULT_CONFIG_DIR = Path.home() / ".cicd-agent"
