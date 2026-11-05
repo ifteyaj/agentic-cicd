@@ -13,6 +13,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+os.environ.setdefault("COLUMNS", "120")
+
 app = typer.Typer(help="cicd-agent command line")
 
 _STDOUT = sys.stdout
