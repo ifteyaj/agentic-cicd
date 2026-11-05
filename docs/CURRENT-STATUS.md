@@ -21,9 +21,7 @@
 - CLI welcome screen: first run, replay, non-TTY, --plain, unreachable API
 - Tests: 182 passed, 0 xfailed
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
-- `AGENTS.md` at the repository root so OpenCode auto-loads harness global
-  rules and project-specific constraints (AGENTS.md adapter; source is
-  `config/global-rules.md`). Kept locally and not published (untracked).
+- AGENTS.md and CLAUDE.md are kept locally and not published (see ADR 0007).
 
 ## In progress
 
