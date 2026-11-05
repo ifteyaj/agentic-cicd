@@ -182,5 +182,64 @@ def trigger(
     raise typer.Exit(code=2)
 
 
+def _get_run(run_id: str) -> tuple[int, dict[str, object]]:
+    """GET one run's detail from the API.
+
+    Returns the status code and JSON object for every response, including 4xx.
+    Only transport and malformed-response errors propagate to the caller.
+    """
+    request = urllib.request.Request(  # noqa: S310
+        _api_url().rstrip("/") + "/api/runs/" + run_id,
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310
+            decoded = json.loads(response.read() or b"{}")
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        try:
+            decoded = json.loads(raw) if raw else {}
+        except ValueError:
+            decoded = {}
+        payload: dict[str, object] = decoded if isinstance(decoded, dict) else {}
+        return exc.code, payload
+
+    if not isinstance(decoded, dict):
+        raise ValueError("response must be a JSON object")
+    return status, decoded
+
+
+@app.command("show")
+def show(run_id: str) -> None:
+    try:
+        status, payload = _get_run(run_id)
+    except ValueError:
+        typer.echo("server returned an unexpected response", err=True)
+        raise typer.Exit(code=5) from None
+    except (OSError, urllib.error.URLError, TimeoutError):
+        typer.echo("○ unreachable", err=True)
+        raise typer.Exit(code=5) from None
+
+    if status == 200:
+        typer.echo(str(payload.get("run_id", "")))
+        typer.echo(str(payload.get("status", "")))
+        attempts = payload.get("attempts", [])
+        if isinstance(attempts, list):
+            for i, attempt in enumerate(attempts, start=1):
+                if isinstance(attempt, dict):
+                    typer.echo(
+                        f"attempt {i} {attempt.get('attempt_id', '')} "
+                        f"{attempt.get('patch_sha256', '')}"
+                    )
+        return
+    if status == 404:
+        typer.echo("run not found", err=True)
+        raise typer.Exit(code=6)
+
+    typer.echo(f"show failed with status {status}", err=True)
+    raise typer.Exit(code=2)
+
+
 if __name__ == "__main__":
     app()
