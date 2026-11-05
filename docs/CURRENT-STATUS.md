@@ -1,8 +1,8 @@
 # Current status
 
 **Last updated:** 2026-11-05\
-**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed. M1c repository allowlist merged; M1c terminal commands not started.\
-**Branch:** `main` (PRs #4–#11 merged; allowlist in PR #11, `884b7e0`).
+**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed. M1c: repository allowlist and `trigger` merged; `show`, `watch`, `runs`, `reject`, and `approve` not started.\
+**Branch:** `main` (PRs #4–#12 merged; allowlist PR #11, `884b7e0`; trigger PR #12, `bee5f98`).
 
 ## What works
 
@@ -22,14 +22,20 @@
   payloads redacted before write
 - Redaction function for token and assignment shapes
 - CLI welcome screen: first run, replay, non-TTY, --plain, unreachable API
-- Tests: 186 passed, 0 xfailed
+- `cicd-agent trigger --repo OWNER/NAME --sha COMMIT [--label NAME]` sends a
+  run to the dev-only mock route. The SHA is checked locally (40 lowercase hex
+  characters) before any call; `--label` is printed only, never sent. Exit
+  codes: 0 success, 2 usage or 422, 3 dev server missing, 4 repo not
+  allowlisted, 5 unreachable or unexpected response. Evidence: PR #12 (merge
+  `bee5f98`), 196 passed, live 202 with a run ID on port 8001.
+- Tests: 196 passed, 0 xfailed
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
 - AGENTS.md and CLAUDE.md are kept locally and not published (see ADR 0007).
 
 ## In progress
 
-M1c terminal commands (`trigger`, `show`, `watch`; then `runs` and `reject`)
-are not started. The allowlist backend is merged and ready for `trigger`.
+M1c terminal commands: `trigger` is done (PR #12). Not started: `show`,
+`watch`, `runs`, `reject`, and `approve` (full approval needs publishing).
 
 ## Known issues
 
@@ -46,10 +52,11 @@ are not started. The allowlist backend is merged and ready for `trigger`.
   restart. This matches production startup semantics; there is no hot reload.
 - No sandbox yet.
 
-## Next concrete action (M2, not M1)
+## Next concrete action (M1c)
 
-1. Merge PR #4 after review.
-2. M2 sandbox: real containers with hardening; hostile-input suite.
+1. `show`, then `watch`, each with a red test first.
+2. `runs` and `reject` after the list and reject endpoints exist.
+3. M2 sandbox: real containers with hardening; hostile-input suite.
 
 ## Recently verified
 
@@ -63,9 +70,11 @@ are not started. The allowlist backend is merged and ready for `trigger`.
 | 2026-10-26 | `graphify extract . --code-only` | 53 nodes, 55 edges |
 | 2026-10-31 | `uv run pytest -q` | 182 passed, 0 xfailed |
 | 2026-10-31 | ruff check, ruff format --check, mypy | pass |
-| 2026-11-05 | `uv run pytest -q` | 186 passed, 0 xfailed |
-| 2026-11-05 | ruff check, ruff format --check, mypy | pass |
 | 2026-11-05 | Mock route on `app.main:app`, `CICD_AGENT_ALLOWED_REPOS` unset | 403 `repository not allowed` |
+| 2026-11-05 | `uv run pytest -q` | 196 passed, 0 xfailed |
+| 2026-11-05 | ruff check, ruff format --check, mypy | pass |
+| 2026-11-05 | Live `trigger` via `python -m app.cli` against uvicorn (port 8001) | run ID + label, exit 0; `POST /api/webhooks/mock 202` |
+| 2026-11-05 | PR #12 merged | merge `bee5f98` |
 
 ## Not verified / residual risk
 
@@ -74,7 +83,9 @@ are not started. The allowlist backend is merged and ready for `trigger`.
   uses signed synthetic payloads.
 - Independent reviews used fresh-context subagents, because the Claude Code review
   runtime was unavailable. Reports are in `docs/designs/reviews/`.
-- Live uvicorn smoke test not re-run after M1b
+- Live uvicorn: health 200 and mock 202 confirmed on a temporary server
+  (port 8001); the long-running port 8000 server was not inspected. Full
+  webhook matrix last run 2026-10-26.
 - Docker not re-run after M1b
 - Redaction covers token and assignment shapes only, not every secret format
 - Non-TTY first run does not write the welcome-seen flag (design decision,
