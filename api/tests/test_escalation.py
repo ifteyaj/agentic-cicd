@@ -24,7 +24,9 @@ def test_stub_forced_to_fail_three_times_ends_in_escalated_with_three_attempts()
     raw = json.dumps(payload).encode()
     signature = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
 
-    client = TestClient(create_app(webhook_secret=secret, stub_mode="fail"))
+    client = TestClient(
+        create_app(webhook_secret=secret, stub_mode="fail", allowed_repos=["example/repo"])
+    )
     response = client.post(
         "/api/webhooks/github",
         content=raw,

@@ -46,6 +46,12 @@ The secret must not be blank or `change-me`; otherwise every delivery returns
 `http://127.0.0.1:8000/api/webhooks/github` with content type `application/json`
 and the `workflow_run` event.
 
+Repositories must be on the allowlist. Set `CICD_AGENT_ALLOWED_REPOS` to a
+comma-separated list of `owner/name` entries; an unset or empty list rejects
+every repository. Matching is case-sensitive (`Example/Repo` is refused). A
+duplicate delivery for a repository later removed from the allowlist still
+returns `200`, because the delivery lookup runs first.
+
 | Response | Meaning |
 | --- | --- |
 | `202` | New run created (`{"run_id", "duplicate": false}`) |
@@ -53,6 +59,7 @@ and the `workflow_run` event.
 | `204` | Event or conclusion ignored |
 | `400` | Malformed JSON |
 | `401` | Missing or invalid signature |
+| `403` | Repository not on the allowlist |
 | `413` | Body over 1 MiB |
 | `422` | Missing/invalid header or field |
 | `503` | Webhook secret not configured or unusable |

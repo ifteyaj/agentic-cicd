@@ -1,6 +1,3 @@
-import pytest
-
-
 def _payload() -> dict[str, object]:
     return {
         "action": "completed",
@@ -14,7 +11,6 @@ def _payload() -> dict[str, object]:
     }
 
 
-@pytest.mark.xfail(strict=True, reason="M1c: repo allowlist not implemented")
 def test_repo_not_on_allowlist_is_rejected_with_403() -> None:
     import hashlib
     import hmac
@@ -42,7 +38,6 @@ def test_repo_not_on_allowlist_is_rejected_with_403() -> None:
     assert client.app.state.run_service.store.count() == 0
 
 
-@pytest.mark.xfail(strict=True, reason="M1c: repo allowlist not implemented")
 def test_repo_on_allowlist_is_accepted() -> None:
     import hashlib
     import hmac
@@ -69,7 +64,6 @@ def test_repo_on_allowlist_is_accepted() -> None:
     assert response.status_code == 202
 
 
-@pytest.mark.xfail(strict=True, reason="M1c: repo allowlist not implemented")
 def test_empty_allowlist_rejects_every_repo() -> None:
     import hashlib
     import hmac
