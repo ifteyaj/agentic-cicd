@@ -13,7 +13,7 @@ def test_mock_route_accepts_requests_when_env_is_dev(monkeypatch: pytest.MonkeyP
         "repo_url": "https://github.com/example/repo",
         "commit_sha": "0123456789abcdef0123456789abcdef01234567",
     }
-    response = client.post("/webhooks/mock", json=body)
+    response = client.post("/api/webhooks/mock", json=body)
 
     assert response.status_code == 202
     assert "run_id" in response.json()
@@ -33,6 +33,6 @@ def test_mock_route_is_unavailable_when_env_is_not_dev(monkeypatch: pytest.Monke
         "repo_url": "https://github.com/example/repo",
         "commit_sha": "0123456789abcdef0123456789abcdef01234567",
     }
-    response = client.post("/webhooks/mock", json=body)
+    response = client.post("/api/webhooks/mock", json=body)
 
     assert response.status_code == 404

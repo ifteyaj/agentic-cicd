@@ -17,7 +17,7 @@
 | FR-8 | Require human approval after validation | Must | No publish transition without approval |
 | FR-9 | Publish an approved patch | Could | PR or branch push after approval |
 
-M1 implements FR-1 through FR-4 plus the run state machine and human-approval transition (FR-8 partially: endpoint and state gate implemented; publishing (FR-9) not implemented). FR-5, FR-6, FR-7, and publishing remain planned.
+M1 implements FR-1 through FR-4 plus the run state machine and human-approval transition (FR-8 partially: endpoint and state gate implemented; publishing (FR-9) not implemented). The M1 validation loop is a fake adapter; FR-5, FR-6, real sandbox validation (FR-7), and publishing remain planned.
 
 ## Non-functional requirements
 
@@ -31,9 +31,10 @@ M1 implements FR-1 through FR-4 plus the run state machine and human-approval tr
 
 ## Constraints
 
-- M1 state is in memory and resets on restart (ADR 0001 covers the later SQLite
-  migration).
-- The service must not execute model-generated code; no sandbox yet.
+- The default wiring is in-memory and resets on restart. The SQLite store is
+  implemented and restart-tested for the run row.
+- The service must not execute model-generated code; the M1 validation loop is a
+  fake adapter and no real Docker sandbox exists yet.
 
 ## Dependencies
 
@@ -43,6 +44,7 @@ M1 implements FR-1 through FR-4 plus the run state machine and human-approval tr
 
 ## Out of scope for M1
 
-- Persistence across restarts.
-- Triage, patch generation, sandbox execution, and publishing.
+- Real Docker sandbox execution (the M1 validation loop is a fake adapter; the
+  real sandbox is M2).
+- Triage, patch generation, and publishing.
 - GitHub App installation tokens.

@@ -27,7 +27,7 @@ def test_reconnect_with_last_event_id_replays_only_missed_events(tmp_path) -> No
     db_path = tmp_path / "events.db"
     client = TestClient(create_app(webhook_secret=secret, db_path=str(db_path)))
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "sse-replay-delivery",

@@ -69,7 +69,7 @@ def _post(
         headers["X-Hub-Signature-256"] = signature
     if event is not None:
         headers["X-GitHub-Event"] = event
-    return client.post("/webhooks/github", content=raw, headers=headers)
+    return client.post("/api/webhooks/github", content=raw, headers=headers)
 
 
 def test_valid_delivery_creates_run() -> None:
@@ -309,7 +309,7 @@ def test_missing_delivery_header_returns_422() -> None:
     client, store = _client()
     raw = json.dumps(_payload()).encode()
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-Hub-Signature-256": _sign(raw),
@@ -389,7 +389,9 @@ def test_concurrent_duplicates_create_one_run() -> None:
     }
 
     def call() -> Any:
-        return TestClient(application).post("/webhooks/github", content=payload, headers=headers)
+        return TestClient(application).post(
+            "/api/webhooks/github", content=payload, headers=headers
+        )
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         responses = list(pool.map(lambda _: call(), range(8)))

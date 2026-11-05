@@ -547,7 +547,7 @@ Work strictly in order. A milestone is done only when every exit criterion is de
 | 9 | Every legal status transition passes and every illegal one is rejected | State machine |
 | 10 | SSE reconnect with `Last-Event-ID` replays only missed events | Streaming contract |
 | 11 | A payload containing a fake secret is redacted before storage | Redaction |
-| 12 | `POST /webhooks/mock` returns `202` with a `run_id` when `ENV=dev`, and is unavailable when `ENV` is not dev | Dev-only ingress, guarded |
+| 12 | `POST /api/webhooks/mock` returns `202` with a `run_id` when `ENV=dev`, and is unavailable when `ENV` is not dev | Dev-only ingress, guarded |
 
 ### 14.2 Additional exit tests by milestone
 

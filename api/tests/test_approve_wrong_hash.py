@@ -26,7 +26,7 @@ def test_approve_with_wrong_patch_hash_returns_409_and_stays_paused() -> None:
 
     client = TestClient(create_app(webhook_secret=secret))
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "approve-wrong-hash-delivery",

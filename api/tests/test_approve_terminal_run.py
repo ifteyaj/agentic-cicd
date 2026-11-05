@@ -27,7 +27,7 @@ def test_approve_on_a_terminal_run_returns_409() -> None:
 
     client = TestClient(create_app(webhook_secret=secret))
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "approve-terminal-delivery",
