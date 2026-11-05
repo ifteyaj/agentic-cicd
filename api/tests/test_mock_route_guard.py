@@ -2,6 +2,10 @@ import pytest
 
 from app import main as app_main
 
+# The mock route validates commit_sha before the allowlist check, and
+# validate_commit_sha rejects an all-zero SHA with 422. Payloads here must use
+# a real non-zero hex SHA so a refusal test cannot pass for the wrong reason.
+
 
 @pytest.fixture(autouse=True)
 def _fresh_env_apps(monkeypatch: pytest.MonkeyPatch) -> None:

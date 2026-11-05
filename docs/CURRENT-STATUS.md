@@ -1,14 +1,17 @@
 # Current status
 
-**Last updated:** 2026-10-31\
-**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed.\
-**Branch:** `main` (PRs #4, #5, #6, #7 merged).
+**Last updated:** 2026-11-05\
+**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed. M1c repository allowlist merged; M1c terminal commands not started.\
+**Branch:** `main` (PRs #4–#11 merged; allowlist in PR #11, `884b7e0`).
 
 ## What works
 
 - `GET /healthz` returns `{"status":"ok"}`.
 - Signed GitHub webhook: 202 new, 200 duplicate, 204 ignored, 401 bad signature,
   422 invalid headers, 503 unusable secret, 413 oversized
+- Repo allowlist with default deny on both the signed and mock routes: exact,
+  case-sensitive `owner/name` match after normalising the GitHub clone URL;
+  unlisted repos return 403 `{"detail": "repository not allowed"}`
 - Dev-only mock route, enabled only when ENV=dev
 - Run states, enforced by transition(): 15 legal transitions
 - Pause at AWAITING_APPROVAL; a run survives a restart (SQLite run row)
@@ -19,13 +22,14 @@
   payloads redacted before write
 - Redaction function for token and assignment shapes
 - CLI welcome screen: first run, replay, non-TTY, --plain, unreachable API
-- Tests: 182 passed, 0 xfailed
+- Tests: 186 passed, 0 xfailed
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
 - AGENTS.md and CLAUDE.md are kept locally and not published (see ADR 0007).
 
 ## In progress
 
-None for M1. Gate review is the owner's decision.
+M1c terminal commands (`trigger`, `show`, `watch`; then `runs` and `reject`)
+are not started. The allowlist backend is merged and ready for `trigger`.
 
 ## Known issues
 
@@ -37,6 +41,9 @@ None for M1. Gate review is the owner's decision.
 - Store cap of 10,000 runs in memory (from M1a); still true for the
   in-memory path.
 - Single process only.
+- The allowlist is resolved when the per-env app is first built and cached for
+  the process lifetime, so changing `CICD_AGENT_ALLOWED_REPOS` requires a
+  restart. This matches production startup semantics; there is no hot reload.
 - No sandbox yet.
 
 ## Next concrete action (M2, not M1)
@@ -56,6 +63,9 @@ None for M1. Gate review is the owner's decision.
 | 2026-10-26 | `graphify extract . --code-only` | 53 nodes, 55 edges |
 | 2026-10-31 | `uv run pytest -q` | 182 passed, 0 xfailed |
 | 2026-10-31 | ruff check, ruff format --check, mypy | pass |
+| 2026-11-05 | `uv run pytest -q` | 186 passed, 0 xfailed |
+| 2026-11-05 | ruff check, ruff format --check, mypy | pass |
+| 2026-11-05 | Mock route on `app.main:app`, `CICD_AGENT_ALLOWED_REPOS` unset | 403 `repository not allowed` |
 
 ## Not verified / residual risk
 

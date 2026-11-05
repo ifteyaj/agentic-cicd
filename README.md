@@ -50,7 +50,8 @@ Repositories must be on the allowlist. Set `CICD_AGENT_ALLOWED_REPOS` to a
 comma-separated list of `owner/name` entries; an unset or empty list rejects
 every repository. Matching is case-sensitive (`Example/Repo` is refused). A
 duplicate delivery for a repository later removed from the allowlist still
-returns `200`, because the delivery lookup runs first.
+returns `200`, because the delivery lookup runs first. The variable is read
+when the app starts, so changing it requires a restart.
 
 | Response | Meaning |
 | --- | --- |
