@@ -26,7 +26,7 @@ def test_run_reaches_awaiting_approval_and_stops() -> None:
 
     client = TestClient(create_app(webhook_secret=secret))
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "pause-gate-delivery",

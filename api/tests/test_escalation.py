@@ -26,7 +26,7 @@ def test_stub_forced_to_fail_three_times_ends_in_escalated_with_three_attempts()
 
     client = TestClient(create_app(webhook_secret=secret, stub_mode="fail"))
     response = client.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "escalation-delivery",

@@ -68,7 +68,7 @@ def _extract(payload: dict[str, object]) -> tuple[str, str, str, str, object, ob
     return action, conclusion, clone_url, head_sha, workflow_run_id, run_attempt
 
 
-@router.post("/webhooks/github")
+@router.post("/api/webhooks/github")
 async def github_webhook(request: Request) -> Response:
     secret = request.app.state.webhook_secret
     if not is_usable_webhook_secret(secret):
@@ -185,7 +185,7 @@ async def github_webhook(request: Request) -> Response:
     return JSONResponse(status_code=202, content={"run_id": result.run_id, "duplicate": False})
 
 
-@mock_router.post("/webhooks/mock", status_code=202)
+@mock_router.post("/api/webhooks/mock", status_code=202)
 async def mock_webhook(request: Request) -> Response:
     try:
         payload = await request.json()

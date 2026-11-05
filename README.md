@@ -10,10 +10,10 @@ The installable Python package and CLI inside this repository are called **`cicd
 
 ## Status
 
-Milestone 1 — walking skeleton implemented. The service exposes:
+M1 walking skeleton complete; CLI commands arrive in M1c. The service exposes:
 
 - `GET /healthz` — liveness.
-- `POST /webhooks/github` — verifies the `X-Hub-Signature-256` HMAC over the
+- `POST /api/webhooks/github` — verifies the `X-Hub-Signature-256` HMAC over the
   raw body, accepts only failed (`failure`/`timed_out`) completed
   `workflow_run` events, and creates exactly one queued run per delivery ID and
   per signed `workflow_run.id:run_attempt`.
@@ -27,7 +27,8 @@ Implemented in M1:
 - Events table with database-assigned IDs, SSE replay with `Last-Event-ID`.
 - Payload redaction before storage and a CLI welcome screen.
 
-Still planned: sandbox execution, triage, patch generation, and publishing.
+The M1 validation loop is a fake adapter; the real Docker sandbox is M2.
+Triage, patch generation, and publishing remain planned.
 A valid approval currently returns `501` because publishing is not implemented.
 
 ## Webhook intake
@@ -42,7 +43,7 @@ uv run uvicorn app.main:app --reload
 
 The secret must not be blank or `change-me`; otherwise every delivery returns
 `503`. Point a GitHub webhook at
-`http://127.0.0.1:8000/webhooks/github` with content type `application/json`
+`http://127.0.0.1:8000/api/webhooks/github` with content type `application/json`
 and the `workflow_run` event.
 
 | Response | Meaning |
@@ -56,8 +57,9 @@ and the `workflow_run` event.
 | `422` | Missing/invalid header or field |
 | `503` | Webhook secret not configured or unusable |
 
-M1 is single-process: deduplication is in memory and resets on restart. Do not
-run multiple workers.
+M1 is single-process: the default wiring is in-memory, so deduplication resets
+on restart. The SQLite store is implemented and tested; it persists runs,
+attempts, and events. Do not run multiple workers.
 
 ## Layout
 

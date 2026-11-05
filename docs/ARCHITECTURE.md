@@ -9,16 +9,16 @@
 GitHub Actions failure
         |
         v
-  POST /webhooks/github  ---> signature check ---> run creation (idempotent)
+  POST /api/webhooks/github  ---> signature check ---> run creation (idempotent)
                                                         |
                                                         v
                                               [planned] triage -> patch
                                                         |
                                                         v
-                                              [planned] sandbox validation
+                                              [fake adapter in M1] sandbox validation
                                                         |
                                                         v
-                                              [planned] human approval
+                                              [implemented] human approval
                                                         |
                                                         v
                                               [planned] publish
@@ -34,7 +34,7 @@ GitHub Actions failure
 | `app.services.runs` | Create and deduplicate runs | domain types, store |
 | `app.domain` | Run/status types and transitions | stdlib only |
 | `app.config` | Environment-backed settings | pydantic-settings |
-| [planned] sandbox | Execute a patch against fixtures | container runtime |
+| fake sandbox adapter | Scripted pass/fail validation in M1; the real Docker sandbox is M2 | `RunService` stub |
 | store | SQLite persistence (run rows, attempts, events) | ADR 0001 |
 
 ## Data flow (M1)
@@ -88,7 +88,7 @@ event rows.
 | Malformed JSON | 400, no run | Sender fixes payload |
 | Missing/invalid header or field | 422, no run | Sender fixes payload |
 | Ignored event or conclusion | 204, no run | None needed |
-| Process restart | In-memory runs are lost | Planned SQLite persistence |
+| Process restart | The default in-memory store loses runs; the SQLite store reloads run and event rows | Use the SQLite store for restart survival |
 | Store cap reached | Oldest run evicted | Replay may create a new run; documented |
 
 ## Deployment
@@ -103,5 +103,5 @@ event rows.
 - Single-process only. Multiple workers would each hold a separate store.
 - The in-memory store is capped at 10,000 runs and evicts the oldest.
 - No authentication beyond webhook signature verification.
-- No sandbox, triage, patch generation, or publishing implementation yet.
-- The approval gate exists as state and endpoint; valid approval currently returns 501.
+- The M1 validation loop is a fake adapter; no real Docker sandbox, triage, patch generation, or publishing implementation yet (the real sandbox is M2).
+- The approval state and endpoint are implemented; a valid approval returns 501 until publishing exists.

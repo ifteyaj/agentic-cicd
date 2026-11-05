@@ -29,7 +29,7 @@ def test_paused_run_survives_restart_and_completes(tmp_path) -> None:
     app1 = create_app(webhook_secret=secret, db_path=db_path)
     client1 = TestClient(app1)
     response = client1.post(
-        "/webhooks/github",
+        "/api/webhooks/github",
         content=raw,
         headers={
             "X-GitHub-Delivery": "restart-gate-delivery",
