@@ -1,8 +1,8 @@
 # Current status
 
-**Last updated:** 2026-11-05\
-**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed. M1c: repository allowlist and `trigger` merged; `show`, `watch`, `runs`, `reject`, and `approve` not started.\
-**Branch:** `main` (PRs #4–#12 merged; allowlist PR #11, `884b7e0`; trigger PR #12, `bee5f98`).
+**Last updated:** 2026-11-11\
+**Current milestone:** M1 walking skeleton. M1b complete on the code side; gate review not yet passed. M1c: repository allowlist, `trigger`, `show`, and the runs list + reject endpoints merged; `watch`, the CLI `runs`/`reject`/`approve` commands, and the rejection trace event remain.\
+**Branch:** `main` (PRs #4–#16 merged; runs list + reject endpoints PR #16, merge `c1376b8`). Red tests for the rejection trace event on `fix/reject-event` (PR #17).
 
 ## What works
 
@@ -17,6 +17,13 @@
 - Pause at AWAITING_APPROVAL; a run survives a restart (SQLite run row)
 - Approval endpoint: wrong patch hash returns 409, run stays paused; terminal
   run returns 409 and is unchanged; a valid approval returns 501
+- `GET /api/runs` lists runs newest first (`limit` 1–200, default 50; `count`
+  is the number of entries returned; equal timestamps keep `run_id`
+  ascending order)
+- `GET /api/runs/{run_id}` returns the run status and attempts (404 otherwise)
+- `POST /api/runs/{run_id}/reject` rejects a run awaiting approval; the body
+  must be empty; 409 when the run is not awaiting approval; writes no
+  attempt, approval record, or branch
 - Three failed attempts end ESCALATED with exact attempt numbers
 - Events table with database-assigned IDs; SSE replay with Last-Event-ID;
   payloads redacted before write
@@ -28,14 +35,21 @@
   codes: 0 success, 2 usage or 422, 3 dev server missing, 4 repo not
   allowlisted, 5 unreachable or unexpected response. Evidence: PR #12 (merge
   `bee5f98`), 196 passed, live 202 with a run ID on port 8001.
-- Tests: 196 passed, 0 xfailed
+- `cicd-agent show RUN_ID` fetches run detail from the live API: prints the
+  run ID, status, and one line per attempt. Exit codes: 0 success, 2
+  unexpected status, 5 unreachable or unexpected response, 6 run not found.
+  Evidence: PR #14 (merge `f0a091f`).
+- Tests: 209 passed, 1 xfailed. The xfail is the red rejection-trace test on
+  `fix/reject-event` (PR #17); it must be dropped when the fix lands.
 - All four quality gates pass: ruff, format, mypy strict, and pytest.
 - AGENTS.md and CLAUDE.md are kept locally and not published (see ADR 0007).
 
 ## In progress
 
-M1c terminal commands: `trigger` is done (PR #12). Not started: `show`,
-`watch`, `runs`, `reject`, and `approve` (full approval needs publishing).
+M1c terminal commands: `trigger` (PR #12) and `show` (PR #14) are done. Not
+started: `watch`, `runs`, `reject`, and `approve` (full approval needs
+publishing). M1c-3 rejection trace event: red test on `fix/reject-event`
+(PR #17); the fix is pending.
 
 ## Known issues
 
@@ -51,12 +65,18 @@ M1c terminal commands: `trigger` is done (PR #12). Not started: `show`,
   the process lifetime, so changing `CICD_AGENT_ALLOWED_REPOS` requires a
   restart. This matches production startup semantics; there is no hot reload.
 - No sandbox yet.
+- Reject writes no `run.status_changed` event; the trace is silent on a
+  rejection. Red test on `fix/reject-event` (PR #17); fix pending.
+- `list_runs` loads every run and sorts in Python. Before the store grows,
+  SQLite needs `LIMIT` and an index on `created_at`.
 
 ## Next concrete action (M1c)
 
-1. `show`, then `watch`, each with a red test first.
-2. `runs` and `reject` after the list and reject endpoints exist.
-3. M2 sandbox: real containers with hardening; hostile-input suite.
+1. Rejection trace event: implement behind the red test (PR #17), dropping
+   the xfail marker in the same change.
+2. `watch`, red tests first.
+3. CLI `runs` and `reject` commands against the merged endpoints.
+4. M2 sandbox: real containers with hardening; hostile-input suite.
 
 ## Recently verified
 
@@ -75,6 +95,9 @@ M1c terminal commands: `trigger` is done (PR #12). Not started: `show`,
 | 2026-11-05 | ruff check, ruff format --check, mypy | pass |
 | 2026-11-05 | Live `trigger` via `python -m app.cli` against uvicorn (port 8001) | run ID + label, exit 0; `POST /api/webhooks/mock 202` |
 | 2026-11-05 | PR #12 merged | merge `bee5f98` |
+| 2026-11-11 | PRs #14 (`show`), #15 (test fix), #16 (runs list + reject endpoints) merged | merges `f0a091f`, `1348af9`, `c1376b8` |
+| 2026-11-11 | `uv run pytest -q` | 209 passed, 1 xfailed |
+| 2026-11-11 | ruff check, ruff format --check, mypy | pass |
 
 ## Not verified / residual risk
 
