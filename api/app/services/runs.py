@@ -112,6 +112,9 @@ class RunStore:
     def count(self) -> int:
         raise NotImplementedError
 
+    def list_runs(self) -> list[Run]:
+        raise NotImplementedError
+
     def get(self, run_id: str) -> Run | None:
         raise NotImplementedError
 
@@ -168,6 +171,10 @@ class InMemoryRunStore(RunStore):
     def count(self) -> int:
         with self._lock:
             return len(self._runs)
+
+    def list_runs(self) -> list[Run]:
+        with self._lock:
+            return list(self._runs.values())
 
     def get_by_delivery(self, delivery_id: str) -> Run | None:
         with self._lock:
@@ -334,6 +341,11 @@ class SQLiteRunStore(RunStore):
         with self._lock:
             row = self._conn.execute("SELECT COUNT(*) FROM runs").fetchone()
             return int(row[0]) if row is not None else 0
+
+    def list_runs(self) -> list[Run]:
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM runs").fetchall()
+            return [self._row_to_run(row) for row in rows]
 
     def get(self, run_id: str) -> Run | None:
         with self._lock:

@@ -1,20 +1,14 @@
-"""M1c-2 phase 1 (red): contract tests for listing and rejecting runs.
+"""Contract tests for listing and rejecting runs.
 
-Two endpoints are specified but not implemented yet: ``GET /api/runs`` lists
-runs newest first with a response count, and ``POST /api/runs/{run_id}/reject``
-rejects a run that is waiting at the approval gate. Every test here is a strict
-xfail and must fail on the missing route (404/405), never on an import or
-fixture error. An unexpected pass means the route landed: drop the marker in
-the same change that implements it.
+``GET /api/runs`` lists runs newest first with a response count, and
+``POST /api/runs/{run_id}/reject`` rejects a run that is waiting at the
+approval gate.
 
 The rejection note is deliberately out of scope until approval persistence
-lands: the reject route must accept only an absent or empty body for now.
+lands: the reject route accepts only an absent or empty body.
 """
 
-import pytest
 
-
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_list_returns_newest_first_with_count() -> None:
     """Newest first by created_at; ``count`` counts the runs in this response."""
     import hashlib
@@ -87,7 +81,6 @@ def test_list_returns_newest_first_with_count() -> None:
     assert unknown.json() == response.json()
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_list_limit_default_is_50_and_max_is_200() -> None:
     import hashlib
     import hmac
@@ -145,7 +138,6 @@ def test_list_limit_default_is_50_and_max_is_200() -> None:
     assert max_body["runs"][:50] == default_body["runs"]
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_list_rejects_limit_outside_range_with_422() -> None:
     """The range is 1..200 inclusive; outside it is 422 and the body is unread."""
     from fastapi.testclient import TestClient
@@ -165,7 +157,6 @@ def test_list_rejects_limit_outside_range_with_422() -> None:
     assert junk_body.status_code == 422, junk_body.text
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_reject_awaiting_run_returns_200_and_status_rejected() -> None:
     """A rejection writes no attempt, no approval record, and no branch."""
     import hashlib
@@ -231,7 +222,6 @@ def test_reject_awaiting_run_returns_200_and_status_rejected() -> None:
     assert service.store.count() == runs_before
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_reject_unknown_run_returns_404() -> None:
     from fastapi.testclient import TestClient
 
@@ -247,7 +237,6 @@ def test_reject_unknown_run_returns_404() -> None:
     assert client.app.state.run_service.store.count() == 0
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_reject_run_not_awaiting_returns_409_and_is_unchanged() -> None:
     import hashlib
     import hmac
@@ -313,7 +302,6 @@ def test_reject_run_not_awaiting_returns_409_and_is_unchanged() -> None:
         assert after_attempts == attempts_before
 
 
-@pytest.mark.xfail(strict=True, reason="M1c-2: list and reject not implemented")
 def test_reject_with_body_returns_422() -> None:
     """The rejection note is deferred to the approval-persistence step.
 
