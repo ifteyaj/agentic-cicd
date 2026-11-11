@@ -1,12 +1,14 @@
-"""Run detail and approval endpoints."""
+"""Run listing, detail, approval, and rejection endpoints."""
 
 import hmac
+from dataclasses import replace
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from app.domain.status import RunStatus
+from app.domain.status import RunStatus, transition
 from app.services.runs import RunService
 
 router = APIRouter()
@@ -19,6 +21,24 @@ class ApproveRequest(BaseModel):
 
 def _error(status_code: int, detail: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"detail": detail})
+
+
+@router.get("/api/runs")
+async def list_runs(
+    request: Request, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> JSONResponse:
+    service: RunService = request.app.state.run_service
+    # Stable two-pass sort: run_id ascending first, then created_at descending,
+    # so equal timestamps keep run_id ascending order.
+    by_run_id = sorted(service.store.list_runs(), key=lambda run: run.run_id)
+    runs = sorted(by_run_id, key=lambda run: run.created_at, reverse=True)[:limit]
+    return JSONResponse(
+        status_code=200,
+        content={
+            "runs": [{"run_id": run.run_id, "status": run.status.value} for run in runs],
+            "count": len(runs),
+        },
+    )
 
 
 @router.get("/api/runs/{run_id}")
@@ -57,6 +77,24 @@ async def approve_run(run_id: str, body: ApproveRequest, request: Request) -> JS
         return _error(409, "patch hash mismatch")
 
     return _error(501, "approval not implemented in this milestone")
+
+
+@router.post("/api/runs/{run_id}/reject")
+async def reject_run(run_id: str, request: Request) -> JSONResponse:
+    service: RunService = request.app.state.run_service
+    # The rejection note is deferred to the approval-persistence step: reject
+    # accepts an absent or empty body only, before any state check.
+    if (await request.body()).strip():
+        return _error(422, "reject does not accept a request body")
+
+    run = service.store.get(run_id)
+    if run is None:
+        return _error(404, "run not found")
+    if run.status is not RunStatus.AWAITING_APPROVAL:
+        return _error(409, "run is not awaiting approval")
+
+    service.store.update(replace(run, status=transition(run.status, RunStatus.REJECTED)))
+    return JSONResponse(status_code=200, content={"run_id": run_id, "status": "rejected"})
 
 
 @router.get("/api/runs/{run_id}/events")
