@@ -66,6 +66,7 @@ def test_plain_mode_is_ascii_only(tmp_path, monkeypatch) -> None:
 
 
 def test_unreachable_api_shows_marker_and_exits_zero(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("CICD_AGENT_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("CICD_AGENT_API_URL", "http://127.0.0.1:1")
 
